@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>弥生铁道站牌生成器</title>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f4f4f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            margin: 0;
+        }
+
+        /* 控制面板全局样式 */
+        .control-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+            width: 900px;
+            box-sizing: border-box;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .main-title {
+            width: 100%;
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            color: #2c3e50;
+            text-align: center;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .section-title {
+            width: 100%;
+            margin: 5px 0 5px 0;
+            font-size: 18px;
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            width: calc(33.333% - 14px);
+        }
+
+        .input-group.wide {
+            width: calc(50% - 10px);
+        }
+
+        .input-group label {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .input-group input[type="text"],
+        .input-group input[type="range"],
+        .input-group select {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            height: 35px;
+            box-sizing: border-box;
+        }
+        
+        .input-group input[type="range"] { padding: 0; }
+        .input-group input[type="text"]:disabled { background-color: #e9ecef; color: #999; cursor: not-allowed; }
+
+        /* 推荐颜色区块 */
+        .color-picker-wrapper { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .input-group input[type="color"] { width: 60px; height: 40px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; padding: 2px; }
+        .color-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+        .swatch { width: 28px; height: 28px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); transition: transform 0.1s, box-shadow 0.1s; }
+        .swatch:hover { transform: scale(1.15); box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 10; }
+
+        /* 滑块值显示样式 */
+        .range-slider { display: flex; align-items: center; gap: 10px; }
+        .range-slider input[type="range"] { flex: 1; margin: 0; }
+        .range-slider span { font-size: 13px; color: #666; min-width: 45px; text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* 功能复选框区块 */
+        .options-row { width: 100%; display: flex; gap: 15px; margin-top: -5px; }
+        .checkbox-wrapper { flex: 1; display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 4px; }
+        .checkbox-wrapper.direction { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .checkbox-wrapper.terminal { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .checkbox-wrapper input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-wrapper label { margin: 0; cursor: pointer; font-size: 14px; color: #333; font-weight: bold; }
+
+        /* 导出按钮样式 */
+        .export-btn {
+            width: 100%; margin-top: 15px; padding: 12px; background-color: #28a745; color: white;
+            border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background-color 0.2s;
+        }
+        .export-btn:hover { background-color: #218838; }
+
+        /* ==================== 站牌主体样式 ==================== */
+        .signboard {
+            width: 900px;
+            height: 340px;
+            background-color: #eaebeb;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .main-station {
+            position: absolute;
+            top: 10%;
+            width: 100%;
+            text-align: center;
+        }
+
+        .zh-font { font-family: 'Source Han Sans SC', 'Source Han Sans CN', SimHei, 'Microsoft YaHei', sans-serif; }
+        .en-font { font-family: Arial, Helvetica, sans-serif; }
+
+        /* --- 💡新增：右上角带框的枢纽图标样式 --- */
+        .top-right-icon-box {
+            position: absolute;
+            top: 25px;       /* 距离顶部距离 */
+            right: 40px;     /* 距离右侧距离 */
+            border: 4px solid #050505; /* 粗边框，符合交通指示牌风格 */
+            border-radius: 12px; /* 圆角外框 */
+            padding: 8px;    /* 图标与边框的内间距 */
+            display: none;   /* 默认不显示 */
+            align-items: center;
+            justify-content: center;
+            background-color: transparent;
+        }
+        
+        .top-right-icon-box svg {
+            fill: #050505;   /* 图标颜色与文字和边框一致 */
+            display: block;  /* 消除 SVG 底部默认间隙 */
+            /* 宽高将由 JavaScript 的滑块控制 */
+        }
+
+        /* --- 主站名包裹层 --- */
+        .main-zh-wrapper {
+            position: relative;
+            display: inline-block; 
+        }
+
+        .main-zh {
+            font-size: 110px; 
+            font-weight: bold; 
+            color: #050505;
+            letter-spacing: 12px;
+            margin-left: 12px; 
+            line-height: 1.1;
+            transition: letter-spacing 0.2s, margin-left 0.2s;
+            display: inline-block; 
+        }
+
+        .main-en {
+            font-size: 38px;
+            font-weight: normal;
+            color: #050505;
+            letter-spacing: 1px;
+            margin-top: -5px; 
+            transition: margin-top 0.2s;
+            display: inline-block; 
+        }
+
+        /* --- 导航标签样式 --- */
+        .nav-label { position: absolute; bottom: 110px; color: #050505; }
+        .nav-label-next { left: 50px; text-align: left; }
+        .nav-label-prev { right: 50px; text-align: right; }
+        #signboard.dir-right .nav-label-next { left: auto; right: 50px; text-align: right; }
+        #signboard.dir-right .nav-label-prev { right: auto; left: 50px; text-align: left; }
+        .nav-zh { font-size: 26px; font-weight: bold; letter-spacing: 2px; margin-bottom: 4px; }
+        .nav-en { font-size: 20px; font-weight: 600; }
+
+        /* --- 底部色带容器 --- */
+        .ribbon-container { position: absolute; bottom: 25px; width: 100%; height: 70px; display: flex; flex-direction: row; }
+        #signboard.dir-right .ribbon-container { flex-direction: row-reverse; }
+
+        .ribbon-next-box { position: relative; flex: 1; height: 100%; overflow: visible; }
+        .ribbon-next-box path { fill: #edcf3b; transition: fill 0.2s; }
+        .ribbon-next-text-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-sizing: border-box; 
+            display: flex; flex-direction: column; justify-content: center; color: white; pointer-events: none;
+            padding-left: 60px; padding-right: 0; align-items: flex-start;
+        }
+        #signboard.dir-right .ribbon-next-text-layer { padding-left: 0; padding-right: 60px; align-items: flex-end; }
+
+        .ribbon-prev-box {
+            flex: 1; background-color: #a7a9ac; box-sizing: border-box; display: flex; flex-direction: column; 
+            justify-content: center; color: white; align-items: flex-end; padding-right: 50px; padding-left: 0;
+        }
+        #signboard.dir-right .ribbon-prev-box { align-items: flex-start; padding-right: 0; padding-left: 50px; }
+
+        .ribbon-station-zh { font-size: 30px; font-weight: bold; letter-spacing: 4px; line-height: 1.2; }
+        .ribbon-station-en { font-size: 20px; font-weight: bold; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+
+    <div class="control-panel">
+        <div class="main-title">🚇 弥生铁道站牌生成器</div>
+        
+        <div class="section-title">📝 文本内容设置</div>
+        
+        <div class="input-group">
+            <label>本站名称 (中文)</label>
+            <input type="text" id="inputMainZh" value="旭日埠头">
+        </div>
+        <div class="input-group">
+            <label>下一站 (中文)</label>
+            <input type="text" id="inputNextZh" value="弥生西站">
+        </div>
+        <div class="input-group">
+            <label>上一站 (中文)</label>
+            <input type="text" id="inputPrevZh" value="弥生南站">
+        </div>
+        
+        <div class="input-group">
+            <label>本站名称 (英文)</label>
+            <input type="text" id="inputMainEn" value="Asahifutou">
+        </div>
+        <div class="input-group">
+            <label>下一站 (英文)</label>
+            <input type="text" id="inputNextEn" value="Misheng South Station">
+        </div>
+        <div class="input-group">
+            <label>上一站 (英文)</label>
+            <input type="text" id="inputPrevEn" value="Misheng South Station">
+        </div>
+
+        <div class="options-row">
+            <div class="checkbox-wrapper direction">
+                <input type="checkbox" id="checkDirection">
+                <label for="checkDirection" style="color: #0c5460;">🔄 换向：下一站指向右侧</label>
+            </div>
+            <div class="checkbox-wrapper terminal">
+                <input type="checkbox" id="checkTerminal">
+                <label for="checkTerminal" style="color: #856404;">🚩 设为终点站 (隐藏上一站)</label>
+            </div>
+        </div>
+
+        <div class="section-title">🔤 排版与字号设置</div>
+
+        <div class="input-group wide">
+            <label>右上角 附加枢纽角标</label>
+            <select id="selectIcon">
+                <option value="none">无附加图标</option>
+                <option value="airport">✈️ 机场 (Airport)</option>
+                <option value="ferry">🚢 轮渡 / 港口 (Ferry)</option>
+                <option value="train">🚄 火车 / 高铁 (Railway)</option>
+            </select>
+        </div>
+        
+        <div class="input-group wide">
+            <label>枢纽角标 大小 (外框会自适应缩放)</label>
+            <div class="range-slider">
+                <input type="range" id="inputIconSize" min="20" max="80" value="45">
+                <span id="valIconSize">45px</span>
+            </div>
+        </div>
+
+        <div class="input-group wide">
+            <label>主站名(中) 字号</label>
+            <div class="range-slider">
+                <input type="range" id="inputMainFontSize" min="50" max="150" value="110">
+                <span id="valMainFontSize">110px</span>
+            </div>
+        </div>
+        
+        <div class="input-group wide">
+            <label>主站名(中) 字间距</label>
+            <div class="range-slider">
+                <input type="range" id="inputLetterSpacing" min="0" max="40" value="12">
+                <span id="valLetterSpacing">12px</span>
+            </div>
+        </div>
+
+        <div class="section-title">🔠 字体与粗细设置</div>
+        
+        <div class="input-group wide">
+            <label>全局中文字体</label>
+            <select id="selectZhFont">
+                <option value="'Source Han Sans SC', SimHei, sans-serif">思源黑体 / 黑体 (推荐)</option>
+                <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
+                <option value="'PingFang SC', sans-serif">苹方 (Mac默认)</option>
+                <option value="SimSun, serif">宋体</option>
+                <option value="KaiTi, serif">楷体</option>
+                <option value="custom">✍️ 自定义系统字体...</option>
+            </select>
+            <input type="text" id="customZhFont" placeholder="输入系统字体名 (如: 方正大黑简体)" style="display:none; margin-top:5px;">
+        </div>
+
+        <div class="input-group wide">
+            <label>全局英文字体</label>
+            <select id="selectEnFont">
+                <option value="Arial, Helvetica, sans-serif">Arial (推荐)</option>
+                <option value="'Times New Roman', serif">Times New Roman</option>
+                <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                <option value="'Courier New', monospace">Courier New</option>
+                <option value="custom">✍️ 自定义系统字体...</option>
+            </select>
+            <input type="text" id="customEnFont" placeholder="输入系统字体名 (如: Futura)" style="display:none; margin-top:5px;">
+        </div>
+
+        <div class="input-group wide">
+            <label>主站名(中) 粗细</label>
+            <select id="selectMainWeight">
+                <option value="bold">粗体 (Bold - 默认)</option>
+                <option value="900">特粗 (Black)</option>
+                <option value="normal">常规 (Normal)</option>
+                <option value="300">细体 (Light)</option>
+            </select>
+        </div>
+        <div class="input-group wide">
+            <label>辅标题及色带文字 粗细</label>
+            <select id="selectSubWeight">
+                <option value="bold">粗体 (Bold - 默认)</option>
+                <option value="normal">常规 (Normal)</option>
+                <option value="300">细体 (Light)</option>
+            </select>
+        </div>
+
+        <div class="section-title">🎨 颜色设置 (1~10号线预设)</div>
+        <div class="input-group" style="width: 100%;">
+            <label>下一站色带颜色</label>
+            <div class="color-picker-wrapper">
+                <input type="color" id="inputColor" value="#edcf3b">
+                <div class="color-swatches" id="colorSwatches">
+                    <div class="swatch" style="background: #edcf3b;" data-color="#edcf3b" title="1号线"></div>
+                    <div class="swatch" style="background: #00679e;" data-color="#00679e" title="2号线"></div>
+                    <div class="swatch" style="background: #e89e47;" data-color="#e89e47" title="3号线"></div>
+                    <div class="swatch" style="background: #01824a;" data-color="#01824a" title="4号线"></div>
+                    <div class="swatch" style="background: #c70541;" data-color="#c70541" title="5号线"></div>
+                    <div class="swatch" style="background: #6e0346;" data-color="#6e0346" title="6号线"></div>
+                    <div class="swatch" style="background: #9dd32d;" data-color="#9dd32d" title="7号线"></div>
+                    <div class="swatch" style="background: #00858a;" data-color="#00858a" title="8号线"></div>
+                    <div class="swatch" style="background: #5ec998;" data-color="#5ec998" title="9号线"></div>
+                    <div class="swatch" style="background: #6e90b6;" data-color="#6e90b6" title="10号线"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="export-btn" id="btnExport">⬇️ 导出为 PNG 高清图片</button>
+    </div>
+
+    <div class="signboard" id="signboard">
+        <div class="top-right-icon-box" id="displayIconBox">
+            </div>
+
+        <div class="main-station">
+            <div class="main-zh-wrapper">
+                <div class="main-zh zh-font" id="displayMainZh">旭日埠头</div>
+            </div>
+            <br>
+            <div class="main-en en-font" id="displayMainEn">Asahifutou</div>
+        </div>
+
+        <div class="nav-label nav-label-next">
+            <div class="nav-zh zh-font nav-weight-target">下一站</div>
+            <div class="nav-en en-font nav-weight-target">Next Station</div>
+        </div>
+        <div class="nav-label nav-label-prev" id="labelPrev">
+            <div class="nav-zh zh-font nav-weight-target">上一站</div>
+            <div class="nav-en en-font nav-weight-target">Previous Station</div>
+        </div>
+
+        <div class="ribbon-container">
+            <div class="ribbon-next-box">
+                <svg viewBox="0 0 450 70" preserveAspectRatio="none" style="width: 100%; height: 100%; display: block;">
+                    <path id="displayRibbonPath" d="M0,35 L40,0 L450,0 L450,70 L40,70 L0,35 Z" fill="#edcf3b"/>
+                </svg>
+                <div class="ribbon-next-text-layer">
+                    <div class="ribbon-station-zh zh-font nav-weight-target" id="displayNextZh">弥生西站</div>
+                    <div class="ribbon-station-en en-font nav-weight-target" id="displayNextEn">Misheng South Station</div>
+                </div>
+            </div>
+            <div class="ribbon-prev-box">
+                <div class="ribbon-station-zh zh-font nav-weight-target" id="displayPrevZh">弥生南站</div>
+                <div class="ribbon-station-en en-font nav-weight-target" id="displayPrevEn">Misheng South Station</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 文本同步 ---
+        const inputs = {
+            mainZh: document.getElementById('inputMainZh'), mainEn: document.getElementById('inputMainEn'),
+            nextZh: document.getElementById('inputNextZh'), nextEn: document.getElementById('inputNextEn'),
+            prevZh: document.getElementById('inputPrevZh'), prevEn: document.getElementById('inputPrevEn'),
+            iconSize: document.getElementById('inputIconSize'),
+            mainFontSize: document.getElementById('inputMainFontSize')
+        };
+        const displays = {
+            mainZh: document.getElementById('displayMainZh'), mainEn: document.getElementById('displayMainEn'),
+            nextZh: document.getElementById('displayNextZh'), nextEn: document.getElementById('displayNextEn'),
+            prevZh: document.getElementById('displayPrevZh'), prevEn: document.getElementById('displayPrevEn'),
+            iconBox: document.getElementById('displayIconBox'), // 获取新的外框容器
+            valIconSize: document.getElementById('valIconSize'),
+            valMainFontSize: document.getElementById('valMainFontSize')
+        };
+
+        const displaysRibbonPath = document.getElementById('displayRibbonPath');
+
+        ['mainZh', 'mainEn', 'nextZh', 'nextEn'].forEach(key => {
+            inputs[key].addEventListener('input', (e) => displays[key].textContent = e.target.value);
+        });
+
+        // --- 2. 枢纽角标逻辑 (右上角带框) ---
+        const selectIcon = document.getElementById('selectIcon');
+
+        const svgLibrary = {
+            airport: '<svg viewBox="0 0 24 24"><path d="M21,16V14L13,9V3.5C13,2.67 12.33,2 11.5,2C10.67,2 10,2.67 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"/></svg>',
+            ferry: '<svg viewBox="0 0 100 100"><path d="M100 66.5c-4 0-6 2.5-10 2.5s-6-2.5-10-2.5-6 2.5-10 2.5-6-2.5-10-2.5-6 2.5-10 2.5-6-2.5-10-2.5-6 2.5-10 2.5-6-2.5-10-2.5-6 2.5-10 2.5-6-2.5-10-2.5v10c4 0 6 2.5 10 2.5s6-2.5 10-2.5 6 2.5 10 2.5 6-2.5 10-2.5 6 2.5 10 2.5 6-2.5 10-2.5 6 2.5 10 2.5 6-2.5 10-2.5 6 2.5 10 2.5 6-2.5 10 2.5s6-2.5 10-2.5zM15 62h70c1-3.5 2-8 3-12.5h-76c1 4.5 2 9 3 12.5zM17 45.5h66c-1.5-3.5-3-7-4.5-10.5h-16c-1 0-1.5-.5-1.5-1.5V18.5c0-1-.5-1.5-1.5-1.5h-10c-1 0-1.5.5-1.5 1.5v15c0 1-.5 1.5-1.5 1.5H21.5c-1.5 3.5-3 7-4.5 10.5z"/></svg>',
+            train: '<svg viewBox="0 0 24 24"><path d="M12,2C8,2 4,2.5 4,6V15.5A3.5,3.5 0 0,0 7.5,19L6,20.5V21H18V20.5L16.5,19A3.5,3.5 0 0,0 20,15.5V6C20,2.5 16,2 12,2M7.5,17A1.5,1.5 0 0,1 6,15.5A1.5,1.5 0 0,1 7.5,14A1.5,1.5 0 0,1 9,15.5A1.5,1.5 0 0,1 7.5,17M11,10H6V6H11V10M13,10V6H18V10H13M16.5,17A1.5,1.5 0 0,1 15,15.5A1.5,1.5 0 0,1 16.5,14A1.5,1.5 0 0,1 18,15.5A1.5,1.5 0 0,1 16.5,17Z"/></svg>'
+        };
+
+        // 更新SVG内部元素大小的方法
+        function applyIconSize() {
+            const sizeVal = inputs.iconSize.value + 'px';
+            const svgElement = displays.iconBox.querySelector('svg');
+            if (svgElement) {
+                svgElement.style.width = sizeVal;
+                svgElement.style.height = sizeVal;
+            }
+        }
+
+        selectIcon.addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (val === 'none') {
+                displays.iconBox.style.display = 'none'; // 隐藏外框
+                displays.iconBox.innerHTML = '';
+            } else {
+                displays.iconBox.style.display = 'flex'; // 显示外框
+                displays.iconBox.innerHTML = svgLibrary[val];
+                applyIconSize(); // 注入SVG后立刻应用滑块的尺寸
+            }
+        });
+
+        // 调节枢纽角标大小 (直接影响框内的SVG大小，外框依靠flex自动撑开)
+        inputs.iconSize.addEventListener('input', (e) => {
+            displays.valIconSize.textContent = e.target.value + 'px';
+            applyIconSize();
+        });
+
+        // --- 3. 排版双调节逻辑 (字号) ---
+        inputs.mainFontSize.addEventListener('input', (e) => {
+            const val = e.target.value;
+            displays.valMainFontSize.textContent = val + 'px';
+            displays.mainZh.style.fontSize = val + 'px';
+        });
+
+        // --- 4. 换向与终点站 ---
+        const checkDirection = document.getElementById('checkDirection');
+        const signboard = document.getElementById('signboard');
+        const pathLeft = "M0,35 L40,0 L450,0 L450,70 L40,70 L0,35 Z";
+        const pathRight = "M0,0 L410,0 L450,35 L410,70 L0,70 Z";
+
+        checkDirection.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                signboard.classList.add('dir-right');
+                displaysRibbonPath.setAttribute('d', pathRight);
+            } else {
+                signboard.classList.remove('dir-right');
+                displaysRibbonPath.setAttribute('d', pathLeft);
+            }
+        });
+
+        const checkTerminal = document.getElementById('checkTerminal');
+        const labelPrev = document.getElementById('labelPrev');
+
+        function updateTerminalState() {
+            if (checkTerminal.checked) {
+                labelPrev.style.display = 'none'; 
+                inputs.prevZh.disabled = true; inputs.prevEn.disabled = true;
+                displays.prevZh.textContent = '终点站'; displays.prevEn.textContent = 'Terminal';
+                displays.prevEn.style.letterSpacing = '2px'; 
+            } else {
+                labelPrev.style.display = 'block'; 
+                inputs.prevZh.disabled = false; inputs.prevEn.disabled = false;
+                displays.prevZh.textContent = inputs.prevZh.value; displays.prevEn.textContent = inputs.prevEn.value;
+                displays.prevEn.style.letterSpacing = '1px';
+            }
+        }
+        checkTerminal.addEventListener('change', updateTerminalState);
+        
+        inputs.prevZh.addEventListener('input', (e) => { if (!checkTerminal.checked) displays.prevZh.textContent = e.target.value; });
+        inputs.prevEn.addEventListener('input', (e) => { if (!checkTerminal.checked) displays.prevEn.textContent = e.target.value; });
+
+        // --- 5. 颜色与排版 ---
+        const colorPicker = document.getElementById('inputColor');
+        colorPicker.addEventListener('input', (e) => displaysRibbonPath.style.fill = e.target.value);
+        document.querySelectorAll('.swatch').forEach(swatch => {
+            swatch.addEventListener('click', (e) => {
+                const hex = e.target.getAttribute('data-color');
+                colorPicker.value = hex; displaysRibbonPath.style.fill = hex; 
+            });
+        });
+
+        document.getElementById('inputLetterSpacing').addEventListener('input', (e) => {
+            const val = e.target.value + 'px';
+            document.getElementById('valLetterSpacing').textContent = val;
+            displays.mainZh.style.letterSpacing = val; displays.mainZh.style.marginLeft = val; 
+        });
+
+        // --- 6. 字体与粗细 ---
+        function updateFonts(cls, val) { document.querySelectorAll(cls).forEach(el => el.style.fontFamily = val); }
+        ['Zh', 'En'].forEach(lang => {
+            const select = document.getElementById(`select${lang}Font`);
+            const custom = document.getElementById(`custom${lang}Font`);
+            const cls = `.${lang.toLowerCase()}-font`;
+            select.addEventListener('change', (e) => {
+                custom.style.display = e.target.value === 'custom' ? 'block' : 'none';
+                updateFonts(cls, e.target.value === 'custom' ? (custom.value || 'sans-serif') : e.target.value);
+            });
+            custom.addEventListener('input', (e) => updateFonts(cls, e.target.value + ', sans-serif'));
+        });
+
+        document.getElementById('selectMainWeight').addEventListener('change', (e) => {
+            displays.mainZh.style.fontWeight = e.target.value;
+            displays.mainEn.style.fontWeight = e.target.value === '900' ? 'bold' : 'normal';
+        });
+        document.getElementById('selectSubWeight').addEventListener('change', (e) => {
+            document.querySelectorAll('.nav-weight-target').forEach(el => el.style.fontWeight = e.target.value);
+        });
+
+        // --- 7. 导出图片 ---
+        document.getElementById('btnExport').addEventListener('click', function() {
+            const btn = this; const originalText = btn.textContent;
+            btn.textContent = '⏳ 正在生成图片...'; btn.style.backgroundColor = '#6c757d';
+
+            html2canvas(signboard, { scale: 3, useCORS: true, backgroundColor: '#eaebeb' }).then(canvas => {
+                const link = document.createElement('a');
+                const stationName = inputs.mainZh.value || 'station';
+                const dirStr = checkDirection.checked ? '向右' : '向左';
+                link.download = `弥生铁道_${stationName}_${dirStr}.png`;
+                link.href = canvas.toDataURL('image/png'); link.click();
+                
+                btn.textContent = originalText; btn.style.backgroundColor = '#28a745';
+            }).catch(err => {
+                alert('生成图片失败，请检查浏览器设置。');
+                btn.textContent = originalText; btn.style.backgroundColor = '#28a745';
+            });
+        });
+    </script>
+</body>
+</html>
